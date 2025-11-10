@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 class CalendarSelection {
-  DateTime? date;
-  String? time; // HH:mm
+  DateTime? selectedDateTime;
 }
 
 class CalendarComponent extends StatefulWidget {
@@ -15,24 +14,58 @@ class CalendarComponent extends StatefulWidget {
 
 class _CalendarComponentState extends State<CalendarComponent> {
   final selection = CalendarSelection();
-  final timeSlots = const ['09:00', '11:00', '13:00', '15:00', '17:00'];
+  final timeSlots = const [
+    {'display': '9:00 AM', 'hour': 9},
+    {'display': '11:00 AM', 'hour': 11},
+    {'display': '1:00 PM', 'hour': 13},
+    {'display': '3:00 PM', 'hour': 15},
+    {'display': '5:00 PM', 'hour': 17}
+  ];
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: now,
-      firstDate: now.subtract(const Duration(days: 0)),
+      initialDate: selection.selectedDateTime ?? now,
+      firstDate: now,
       lastDate: now.add(const Duration(days: 365)),
-      selectableDayPredicate: (d) {
-        // Monday..Friday only
-        return d.weekday >= DateTime.monday && d.weekday <= DateTime.friday;
-      },
+      selectableDayPredicate: (d) => d.weekday >= DateTime.monday && d.weekday <= DateTime.friday,
     );
     if (picked != null) {
-      setState(() => selection.date = picked);
+      final currentTime = selection.selectedDateTime?.hour ?? 9;
+      final newDateTime = DateTime(picked.year, picked.month, picked.day, currentTime, 0);
+      setState(() => selection.selectedDateTime = newDateTime);
       widget.onSelectionChanged(selection);
     }
+  }
+
+  void _selectTime(Map<String, dynamic> slot) {
+    DateTime newDateTime;
+    if (selection.selectedDateTime == null) {
+      final now = DateTime.now();
+      newDateTime = DateTime(now.year, now.month, now.day, slot['hour'], 0);
+      if (newDateTime.weekday == DateTime.saturday) {
+        newDateTime = newDateTime.add(const Duration(days: 2));
+      } else if (newDateTime.weekday == DateTime.sunday) {
+        newDateTime = newDateTime.add(const Duration(days: 1));
+      }
+      if (newDateTime.isBefore(now)) {
+        newDateTime = newDateTime.add(const Duration(days: 1));
+        while (newDateTime.weekday == DateTime.saturday || newDateTime.weekday == DateTime.sunday) {
+          newDateTime = newDateTime.add(const Duration(days: 1));
+        }
+      }
+    } else {
+      newDateTime = DateTime(
+        selection.selectedDateTime!.year,
+        selection.selectedDateTime!.month,
+        selection.selectedDateTime!.day,
+        slot['hour'],
+        0
+      );
+    }
+    setState(() => selection.selectedDateTime = newDateTime);
+    widget.onSelectionChanged(selection);
   }
 
   @override
@@ -44,11 +77,11 @@ class _CalendarComponentState extends State<CalendarComponent> {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Select a date', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('Seleccione una fecha', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            OutlinedButton(onPressed: _pickDate, child: Text(selection.date == null ? 'Select a date' : _fmt(selection.date!))),
+            OutlinedButton(onPressed: _pickDate, child: Text(selection.selectedDateTime == null ? 'Seleccione una fecha' : _fmt(selection.selectedDateTime!))),
             const SizedBox(height: 8),
-            const Text('Only business days (Monday to Friday)', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const Text('Solo días laborables (Lunes a Viernes)', style: TextStyle(color: Colors.grey, fontSize: 12)),
           ]),
         ),
       ),
@@ -58,10 +91,10 @@ class _CalendarComponentState extends State<CalendarComponent> {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Select a time', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('Seleccione una hora', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             ...timeSlots.map((slot) {
-              final isSelected = selection.time == slot;
+              final isSelected = selection.selectedDateTime != null && selection.selectedDateTime!.hour == slot['hour'];
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: ElevatedButton(
@@ -70,16 +103,13 @@ class _CalendarComponentState extends State<CalendarComponent> {
                     foregroundColor: Colors.white,
                     minimumSize: const Size.fromHeight(44),
                   ),
-                  onPressed: () {
-                    setState(() => selection.time = slot);
-                    widget.onSelectionChanged(selection);
-                  },
-                  child: Text(_toAmPm(slot)),
+                  onPressed: () => _selectTime(slot),
+                  child: Text(slot['display'] as String),
                 ),
               );
             }),
             const SizedBox(height: 8),
-            const Text('Available since Monday to Friday', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const Text('Disponible de Lunes a Viernes', style: TextStyle(color: Colors.grey, fontSize: 12)),
           ]),
         ),
       ),
@@ -87,12 +117,4 @@ class _CalendarComponentState extends State<CalendarComponent> {
   }
 
   String _fmt(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  String _toAmPm(String hhmm) {
-    final parts = hhmm.split(':');
-    var h = int.parse(parts[0]);
-    final m = parts[1];
-    final suffix = h >= 12 ? 'PM' : 'AM';
-    if (h == 0) h = 12; else if (h > 12) h -= 12;
-    return '$h:${m} $suffix';
-  }
 }
